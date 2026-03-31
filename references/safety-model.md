@@ -50,6 +50,12 @@ Observed-but-unofficial artifacts such as `AutoClaw` are reported as `manual_rev
 
 If a custom override points at an opaque directory name such as `~/Documents/agent-state`, the scanner downgrades it to `manual_review` instead of deleting it automatically.
 
+### Control 8: Neighboring AI tooling roots are hard exclusions
+
+Paths under customization roots for Codex, Claude Code, Gemini CLI, and OpenCode are treated as protected even when the entry name itself contains `openclaw`.
+
+This prevents OpenClaw cleanup from spilling into neighboring agent skills, subagents, or custom command directories.
+
 ## Recommended agent behavior
 
 - explain the plan before `apply`

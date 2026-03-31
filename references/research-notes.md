@@ -109,3 +109,19 @@ That led to one core design rule in this repo:
 - Legacy official traces: eligible for auto-delete when confirmed
 - Companion-app traces: detect and report, but do not auto-delete
 - Codex/OpenCode skills with `openclaw` in the folder name: excluded from uninstall scope
+
+## Cross-tooling protection basis
+
+To avoid collateral damage in neighboring agent ecosystems, the repo also treats extension roots from other mainstream local coding agents as protected:
+
+- Claude Code:
+  - `~/.claude/agents`
+  - `~/.claude/commands`
+- Gemini CLI:
+  - `~/.gemini/commands`
+- OpenCode:
+  - `~/.config/opencode/skills`
+  - project-local `.opencode/skills`
+  - compatibility roots such as `.claude/skills` and `.agents/skills`
+
+These directories are not OpenClaw install targets, even if an entry name contains `openclaw`.

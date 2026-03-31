@@ -22,6 +22,7 @@ Use the deterministic helper script in [scripts/openclaw_uninstall.py](scripts/o
 ## Hard boundaries
 
 - Never auto-delete anything under `.codex/skills` or `.agents/skills`.
+- Never auto-delete anything under protected AI tooling roots such as `.claude/skills`, `.claude/agents`, `.claude/commands`, `.gemini/commands`, `.opencode/skills`, or `.config/opencode/skills`.
 - Never treat `openclaw` in a path string as sufficient deletion evidence by itself.
 - Known companion traces such as `AutoClaw` must be reported as `manual_review`, not auto-deleted.
 - Require explicit user intent before `apply`.
@@ -108,6 +109,10 @@ Summarize:
   - detect Scheduled Task naming conventions
   - detect Startup-folder fallback launchers
   - detect `gateway.cmd` and `node.cmd` in the state dir
+- Neighboring AI tooling ecosystems:
+  - protect Claude Code subagent/custom-command directories
+  - protect Gemini CLI custom-command directories
+  - protect OpenCode skill directories and compatibility skill roots
 
 ## References
 

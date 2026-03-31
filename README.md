@@ -74,7 +74,7 @@ The scanner reports but does not auto-delete:
 - companion-app traces such as `AutoClaw`
 - browser bridge artifacts that are not part of the documented official OpenClaw core install
 - opaque `OPENCLAW_STATE_DIR` overrides that do not carry an explicit `openclaw` marker in the path
-- skill directories under `.codex/skills` or `.agents/skills`
+- protected AI tooling roots such as `.codex/skills`, `.agents/skills`, `.claude/skills`, `.claude/agents`, `.claude/commands`, `.gemini/commands`, and OpenCode skill directories
 - arbitrary files that merely contain the string `openclaw`
 
 ## Safety guarantees
@@ -89,6 +89,7 @@ This repo is designed around deletion safety, not convenience theater.
 - It edits shell init files surgically and keeps a backup.
 - It reports privileged leftovers as exact manual commands instead of pretending the uninstall fully succeeded.
 - It encodes exclusions as first-class output, so the agent can explain what it intentionally skipped.
+- It protects neighboring AI extension ecosystems so OpenClaw cleanup cannot spill into Codex, Claude Code, Gemini CLI, or OpenCode customization directories.
 
 ## Quick start
 

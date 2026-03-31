@@ -59,6 +59,43 @@ class OpenClawUninstallTests(unittest.TestCase):
             self.assertEqual(len(excluded), 1)
             self.assertEqual(excluded[0].display_path, "/Users/tester/.codex/skills/openclaw-openclaw-obsidian")
 
+    def test_scan_excludes_other_agent_tooling_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            entries = [
+                root / "Users" / "tester" / ".claude" / "agents" / "openclaw-helper.md",
+                root / "Users" / "tester" / ".gemini" / "commands" / "openclaw.toml",
+                root / "Users" / "tester" / ".config" / "opencode" / "skills" / "openclaw-cleanup" / "SKILL.md",
+            ]
+            for entry in entries:
+                entry.parent.mkdir(parents=True, exist_ok=True)
+                entry.write_text("placeholder", encoding="utf-8")
+            artifacts = mod.scan_installation(
+                platform_name="darwin",
+                home_display="/Users/tester",
+                root_prefix=str(root),
+            )
+            excluded = {(artifact.kind, artifact.display_path) for artifact in artifacts if artifact.auto_action == mod.EXCLUDED}
+            self.assertIn(("excluded_path", "/Users/tester/.claude/agents/openclaw-helper.md"), excluded)
+            self.assertIn(("excluded_path", "/Users/tester/.gemini/commands/openclaw.toml"), excluded)
+            self.assertIn(("excluded_path", "/Users/tester/.config/opencode/skills/openclaw-cleanup"), excluded)
+
+    def test_scan_excludes_project_local_tooling_roots_from_git_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "Users" / "tester" / "workspace" / "repo"
+            entry = project / ".opencode" / "skills" / "openclaw-guard" / "SKILL.md"
+            entry.parent.mkdir(parents=True, exist_ok=True)
+            entry.write_text("placeholder", encoding="utf-8")
+            artifacts = mod.scan_installation(
+                platform_name="darwin",
+                home_display="/Users/tester",
+                root_prefix=str(root),
+                git_dir="/Users/tester/workspace/repo",
+            )
+            excluded = {(artifact.kind, artifact.display_path) for artifact in artifacts if artifact.auto_action == mod.EXCLUDED}
+            self.assertIn(("excluded_path", "/Users/tester/workspace/repo/.opencode/skills/openclaw-guard"), excluded)
+
     def test_companion_artifacts_are_manual_review_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -194,6 +231,24 @@ class OpenClawUninstallTests(unittest.TestCase):
             result = mod.delete_path(artifact)
             self.assertEqual(result["status"], "refused_unsafe_path")
             self.assertTrue(custom_state.exists())
+
+    def test_protected_tooling_custom_state_is_excluded_and_not_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            protected_dir = root / "Users" / "tester" / ".claude" / "agents" / "openclaw-helper"
+            protected_dir.mkdir(parents=True)
+            with mock.patch.dict(os.environ, {"OPENCLAW_STATE_DIR": "/Users/tester/.claude/agents/openclaw-helper"}, clear=False):
+                artifacts = mod.scan_installation(
+                    platform_name="darwin",
+                    home_display="/Users/tester",
+                    root_prefix=str(root),
+                )
+            matched = [artifact for artifact in artifacts if artifact.display_path == "/Users/tester/.claude/agents/openclaw-helper"]
+            self.assertEqual(len(matched), 1)
+            self.assertEqual(matched[0].auto_action, mod.EXCLUDED)
+            result = mod.delete_path(matched[0])
+            self.assertEqual(result["status"], "refused_protected_path")
+            self.assertTrue(protected_dir.exists())
 
 
 if __name__ == "__main__":

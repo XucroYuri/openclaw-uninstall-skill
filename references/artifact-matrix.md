@@ -22,11 +22,18 @@
 | Companion app traces | `AutoClaw.app`, `autoclaw` app support | Not part of official OpenClaw uninstall docs |
 | Browser bridges from companion apps | `com.autoclaw.native_host_stub.json` | Adjacent ecosystem artifact, not official OpenClaw core |
 | Codex skill folders | `.codex/skills/openclaw-openclaw-obsidian` | Name collision does not imply uninstall target |
+| Claude Code / Gemini CLI / OpenCode extension roots | `.claude/agents/openclaw-helper.md`, `.gemini/commands/openclaw.toml`, `.opencode/skills/openclaw-guard/` | Neighboring AI tooling customization must never be swept by OpenClaw uninstall |
 | Custom state override without OpenClaw marker | `~/Documents/agent-state` from `OPENCLAW_STATE_DIR` | Too risky to auto-delete because it may not be a dedicated OpenClaw directory |
 
 ## Explicit exclusions
 
 - `.codex/skills/**`
 - `.agents/skills/**`
+- `.claude/skills/**`
+- `.claude/agents/**`
+- `.claude/commands/**`
+- `.gemini/commands/**`
+- `.opencode/skills/**`
+- `.config/opencode/skills/**`
 - arbitrary docs, notes, backups, or reports that merely mention OpenClaw
 - any path discovered only by substring matching without a supported install-path rule

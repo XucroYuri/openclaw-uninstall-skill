@@ -26,6 +26,16 @@ from typing import Iterable, Iterator
 CONFIRM_PHRASE = "REMOVE OPENCLAW FROM THIS MACHINE"
 OFFICIAL_COMPANION_REVIEW = "manual_review"
 EXCLUDED = "excluded"
+PROTECTED_TOOL_ROOTS = [
+    ((".codex", "skills"), "Codex skills"),
+    ((".agents", "skills"), "agent-compatible skills"),
+    ((".claude", "skills"), "Claude-compatible skills"),
+    ((".claude", "agents"), "Claude Code subagents"),
+    ((".claude", "commands"), "Claude Code custom commands"),
+    ((".gemini", "commands"), "Gemini CLI custom commands"),
+    ((".opencode", "skills"), "OpenCode project skills"),
+    ((".config", "opencode", "skills"), "OpenCode global skills"),
+]
 
 SHELL_PATTERNS = [
     re.compile(r'^\s*#\s*OpenClaw Completion\s*$'),
@@ -141,11 +151,29 @@ def normalize_display_path(display_path: str) -> str:
     return normalized
 
 
+def protected_tool_root(display_path: str) -> tuple[str, str] | None:
+    parts = [segment for segment in normalize_display_path(display_path).split("/") if segment]
+    lowered = [segment.lower() for segment in parts]
+    for chain, label in PROTECTED_TOOL_ROOTS:
+        width = len(chain)
+        for index in range(len(lowered) - width + 1):
+            if tuple(lowered[index : index + width]) == chain:
+                return ("/".join(chain), label)
+    return None
+
+
 def path_has_openclaw_marker(display_path: str) -> bool:
     return "openclaw" in normalize_display_path(display_path).lower()
 
 
 def classify_custom_state_path(display_path: str) -> tuple[str, str | None]:
+    protected = protected_tool_root(display_path)
+    if protected:
+        root, label = protected
+        return (
+            EXCLUDED,
+            f"Path is inside protected {label} root `{root}` and is outside OpenClaw uninstall scope.",
+        )
     if path_has_openclaw_marker(display_path):
         return "delete", None
     return (
@@ -244,18 +272,79 @@ def make_artifact(
     metadata: dict[str, str] | None = None,
 ) -> Artifact:
     actual = resolver.path(display_path)
+    protected = protected_tool_root(display_path)
+    effective_auto_action = auto_action
+    effective_notes = notes
+    if protected:
+        root, label = protected
+        effective_auto_action = EXCLUDED
+        protection_note = f"Located under protected {label} root `{root}` and outside uninstall scope."
+        effective_notes = protection_note if not effective_notes else f"{effective_notes} {protection_note}"
     return Artifact(
         kind=kind,
         display_path=display_path,
         actual_path=actual,
         platform=platform_name,
         profile=profile,
-        auto_action=auto_action,
+        auto_action=effective_auto_action,
         requires_privilege=privilege_required(display_path, platform_name),
-        notes=notes,
+        notes=effective_notes,
         evidence=list(evidence or []),
         metadata=metadata or {},
     )
+
+
+def protected_root_candidates(home_display: str, git_dir: str | None = None, root_prefix: str | None = None) -> list[str]:
+    candidates = [
+        f"{home_display}/.codex/skills",
+        f"{home_display}/.agents/skills",
+        f"{home_display}/.claude/skills",
+        f"{home_display}/.claude/agents",
+        f"{home_display}/.claude/commands",
+        f"{home_display}/.gemini/commands",
+        f"{home_display}/.config/opencode/skills",
+    ]
+    project_scopes: list[str] = []
+    if git_dir:
+        project_scopes.append(git_dir)
+    if not root_prefix:
+        project_scopes.append(str(Path.cwd()))
+    for scope in project_scopes:
+        candidates.extend(
+            [
+                f"{scope}/.codex/skills",
+                f"{scope}/.agents/skills",
+                f"{scope}/.claude/skills",
+                f"{scope}/.claude/agents",
+                f"{scope}/.claude/commands",
+                f"{scope}/.gemini/commands",
+                f"{scope}/.opencode/skills",
+            ]
+        )
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        normalized = normalize_display_path(candidate)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(candidate)
+    return deduped
+
+
+def display_from_actual(actual: Path, resolver: PathResolver) -> str:
+    if not resolver.root_prefix:
+        return str(actual)
+    relative = actual.resolve().relative_to(resolver.root_prefix)
+    if resolver.platform_name == "win32":
+        parts = list(relative.parts)
+        if parts:
+            drive = parts[0]
+            tail = "\\".join(parts[1:])
+            prefix = "\\" if tail else ""
+            return f"{drive}:{prefix}{tail}"
+        return str(actual)
+    return "/" + relative.as_posix()
 
 
 def scan_installation(
@@ -271,27 +360,38 @@ def scan_installation(
     seen: set[tuple[str, str]] = set()
 
     def add(artifact: Artifact) -> None:
+        for index, existing in enumerate(artifacts):
+            if existing.display_path != artifact.display_path:
+                continue
+            if existing.auto_action == EXCLUDED:
+                return
+            if artifact.auto_action == EXCLUDED:
+                artifacts[index] = artifact
+                seen.add((artifact.kind, artifact.display_path))
+                return
+            return
         key = (artifact.kind, artifact.display_path)
         if key in seen:
             return
         seen.add(key)
         artifacts.append(artifact)
 
-    # Exclude skill folders explicitly.
-    for display in [
-        f"{home_display}/.codex/skills/openclaw-openclaw-obsidian",
-        f"{home_display}/.agents/skills/openclaw-openclaw-obsidian",
-    ]:
-        actual = resolver.path(display)
-        if actual.exists():
+    # Expose protected tooling paths explicitly when they contain OpenClaw in the entry name.
+    for root_display in protected_root_candidates(home_display, git_dir, root_prefix):
+        root_actual = resolver.path(root_display)
+        if not root_actual.exists() or not root_actual.is_dir():
+            continue
+        for candidate in root_actual.rglob("*"):
+            if "openclaw" not in candidate.name.lower():
+                continue
             add(
                 make_artifact(
                     kind="excluded_path",
-                    display_path=display,
+                    display_path=display_from_actual(candidate, resolver),
                     resolver=resolver,
                     platform_name=platform_name,
                     auto_action=EXCLUDED,
-                    notes="Contains 'openclaw' in the path but is a skill directory and outside uninstall scope.",
+                    notes="Contains 'openclaw' in the name but lives inside a protected AI tooling directory.",
                 )
             )
 
@@ -656,6 +756,8 @@ def delete_path(artifact: Artifact) -> dict[str, object]:
     path = artifact.actual_path
     if not path.exists() and not path.is_symlink():
         return {"status": "missing", "path": artifact.display_path}
+    if protected_tool_root(artifact.display_path):
+        return {"status": "refused_protected_path", "path": artifact.display_path}
     if (
         artifact.kind == "custom_path" and not path_has_openclaw_marker(artifact.display_path)
     ) or (
