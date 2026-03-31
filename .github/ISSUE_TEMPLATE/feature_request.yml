@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest support for a new official OpenClaw artifact or workflow.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: Request
+      description: What official artifact or uninstall scenario should be added?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Link the official docs or package evidence that justifies the change.
+    validations:
+      required: true

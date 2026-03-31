@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenClaw 安全卸载 / OpenClaw Safe Uninstall"
+  short_description: "高风险本机卸载技能：先扫描 OpenClaw 安装与残留，再计划、执行、验证，默认排除误删风险高的非目标 artifacts。"
+  default_prompt: "使用 $openclaw-safe-uninstall 处理本机 OpenClaw 卸载任务，严格遵循 scan -> plan -> approval -> apply -> verify 流程，并避免误删非目标 artifacts。"
