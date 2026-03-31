@@ -73,6 +73,7 @@ The scanner reports but does not auto-delete:
 
 - companion-app traces such as `AutoClaw`
 - browser bridge artifacts that are not part of the documented official OpenClaw core install
+- opaque `OPENCLAW_STATE_DIR` overrides that do not carry an explicit `openclaw` marker in the path
 - skill directories under `.codex/skills` or `.agents/skills`
 - arbitrary files that merely contain the string `openclaw`
 

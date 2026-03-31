@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -133,6 +134,66 @@ class OpenClawUninstallTests(unittest.TestCase):
             found = {(artifact.kind, artifact.display_path) for artifact in artifacts}
             self.assertIn(("package_dir", "/usr/local/lib/node_modules/openclaw"), found)
             self.assertNotIn(("package_dir", "/usr/local/lib/node_modules"), found)
+
+    def test_env_custom_state_without_openclaw_marker_is_manual_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            custom_state = root / "Users" / "tester" / "Documents" / "agent-state"
+            custom_state.mkdir(parents=True)
+            with mock.patch.dict(os.environ, {"OPENCLAW_STATE_DIR": "/Users/tester/Documents/agent-state"}, clear=False):
+                artifacts = mod.scan_installation(
+                    platform_name="darwin",
+                    home_display="/Users/tester",
+                    root_prefix=str(root),
+                )
+            matched = [artifact for artifact in artifacts if artifact.display_path == "/Users/tester/Documents/agent-state"]
+            self.assertEqual(len(matched), 1)
+            self.assertEqual(matched[0].auto_action, mod.OFFICIAL_COMPANION_REVIEW)
+
+    def test_service_custom_state_without_openclaw_marker_is_manual_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            launch = root / "Users" / "tester" / "Library" / "LaunchAgents"
+            launch.mkdir(parents=True)
+            (launch / "ai.openclaw.gateway.plist").write_text(
+                """
+                <plist>
+                  <key>EnvironmentVariables</key>
+                  <dict>
+                    <key>OPENCLAW_STATE_DIR</key>
+                    <string>/Users/tester/Documents/agent-state</string>
+                  </dict>
+                </plist>
+                """,
+                encoding="utf-8",
+            )
+            custom_state = root / "Users" / "tester" / "Documents" / "agent-state"
+            custom_state.mkdir(parents=True)
+            artifacts = mod.scan_installation(
+                platform_name="darwin",
+                home_display="/Users/tester",
+                root_prefix=str(root),
+            )
+            matched = [artifact for artifact in artifacts if artifact.display_path == "/Users/tester/Documents/agent-state"]
+            self.assertEqual(len(matched), 1)
+            self.assertEqual(matched[0].auto_action, mod.OFFICIAL_COMPANION_REVIEW)
+
+    def test_delete_path_refuses_unsafe_custom_state_without_openclaw_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            custom_state = root / "Users" / "tester" / "Documents" / "agent-state"
+            custom_state.mkdir(parents=True)
+            resolver = mod.PathResolver("darwin", "/Users/tester", str(root))
+            artifact = mod.make_artifact(
+                kind="state_dir",
+                display_path="/Users/tester/Documents/agent-state",
+                resolver=resolver,
+                platform_name="darwin",
+                profile="custom",
+            )
+            result = mod.delete_path(artifact)
+            self.assertEqual(result["status"], "refused_unsafe_path")
+            self.assertTrue(custom_state.exists())
 
 
 if __name__ == "__main__":

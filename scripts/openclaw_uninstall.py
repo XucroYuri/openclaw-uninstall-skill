@@ -134,6 +134,26 @@ def privilege_required(display_path: str, platform_name: str) -> bool:
     return display_path.startswith("/usr/") or display_path.startswith("/opt/") or display_path.startswith("/Library/")
 
 
+def normalize_display_path(display_path: str) -> str:
+    normalized = display_path.replace("\\", "/")
+    if normalized != "/":
+        normalized = normalized.rstrip("/")
+    return normalized
+
+
+def path_has_openclaw_marker(display_path: str) -> bool:
+    return "openclaw" in normalize_display_path(display_path).lower()
+
+
+def classify_custom_state_path(display_path: str) -> tuple[str, str | None]:
+    if path_has_openclaw_marker(display_path):
+        return "delete", None
+    return (
+        OFFICIAL_COMPANION_REVIEW,
+        "Custom OPENCLAW_STATE_DIR is outside the default path set and lacks an explicit 'openclaw' path marker. Review manually before deleting.",
+    )
+
+
 def file_contains(path: Path, needle: str) -> bool:
     try:
         return needle in path.read_text(encoding="utf-8", errors="ignore")
@@ -292,6 +312,10 @@ def scan_installation(
     for profile_name, display in candidate_states:
         actual = resolver.path(display)
         if actual.exists():
+            auto_action = "delete"
+            notes = None
+            if profile_name == "custom":
+                auto_action, notes = classify_custom_state_path(display)
             add(
                 make_artifact(
                     kind="state_dir",
@@ -299,6 +323,8 @@ def scan_installation(
                     resolver=resolver,
                     platform_name=platform_name,
                     profile=profile_name,
+                    auto_action=auto_action,
+                    notes=notes,
                 )
             )
 
@@ -546,22 +572,36 @@ def extract_custom_service_paths(
         return
     keys = ["OPENCLAW_CONFIG_PATH", "OPENCLAW_STATE_DIR"]
     for key in keys:
-        for match in re.finditer(rf"{key}[=:\s\"']+([^\"'\r\n<]+)", text):
-            value = match.group(1).strip()
-            if not value:
-                continue
-            if value.startswith("$") or value.startswith("%"):
-                continue
-            candidate_actual = resolver.path(value)
-            if candidate_actual.exists():
+        patterns = [
+            rf"{key}[=:\s\"']+([^\"'\r\n<]+)",
+            rf"<key>\s*{re.escape(key)}\s*</key>\s*<string>\s*([^<\r\n]+)\s*</string>",
+        ]
+        seen_values: set[str] = set()
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
+                value = match.group(1).strip()
+                if not value or value in seen_values:
+                    continue
+                seen_values.add(value)
+                if value.startswith("$") or value.startswith("%"):
+                    continue
+                candidate_actual = resolver.path(value)
+                if not candidate_actual.exists():
+                    continue
+                auto_action = "delete" if key == "OPENCLAW_STATE_DIR" else OFFICIAL_COMPANION_REVIEW
+                notes = f"Discovered via {key} inside {display}."
+                if key == "OPENCLAW_STATE_DIR":
+                    auto_action, override_note = classify_custom_state_path(value)
+                    if override_note:
+                        notes = f"{notes} {override_note}"
                 add_artifact(
                     make_artifact(
                         kind="custom_path",
                         display_path=value,
                         resolver=resolver,
                         platform_name=platform_name,
-                        auto_action="delete" if key == "OPENCLAW_STATE_DIR" else "manual_review",
-                        notes=f"Discovered via {key} inside {display}.",
+                        auto_action=auto_action,
+                        notes=notes,
                     )
                 )
 
@@ -616,6 +656,12 @@ def delete_path(artifact: Artifact) -> dict[str, object]:
     path = artifact.actual_path
     if not path.exists() and not path.is_symlink():
         return {"status": "missing", "path": artifact.display_path}
+    if (
+        artifact.kind == "custom_path" and not path_has_openclaw_marker(artifact.display_path)
+    ) or (
+        artifact.kind == "state_dir" and artifact.profile == "custom" and not path_has_openclaw_marker(artifact.display_path)
+    ):
+        return {"status": "refused_unsafe_path", "path": artifact.display_path}
     try:
         if path.is_symlink() or path.is_file():
             path.unlink()
@@ -807,7 +853,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report_dir = report_path(args.report_dir or None)
     report_dir.mkdir(parents=True, exist_ok=True)
-    (report_dir / "scan.json").write_text(json.dumps(base, indent=2, ensure_ascii=False), encoding="utf-8")
+    (report_dir / "openclaw-uninstall-scan.json").write_text(json.dumps(base, indent=2, ensure_ascii=False), encoding="utf-8")
     if args.dry_run:
         base["report_dir"] = report_dir.as_posix()
         base["dry_run"] = True
@@ -831,7 +877,7 @@ def main(argv: list[str] | None = None) -> int:
             [artifact for artifact in remaining if artifact.requires_privilege and artifact.auto_action not in (EXCLUDED, OFFICIAL_COMPANION_REVIEW)]
         ),
     }
-    (report_dir / "apply.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    (report_dir / "openclaw-uninstall-apply.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     emit(report, args.json)
     hard_remaining = [
         artifact

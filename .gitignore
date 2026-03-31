@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 reports/
+**/openclaw-uninstall-scan.json
+**/openclaw-uninstall-apply.json
+**/*.bak.openclaw-uninstall-*

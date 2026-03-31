@@ -44,6 +44,12 @@ If a binary or package dir is root-owned, the tool reports the exact manual clea
 
 Observed-but-unofficial artifacts such as `AutoClaw` are reported as `manual_review`.
 
+### Control 7: Custom state overrides still need an OpenClaw marker
+
+`OPENCLAW_STATE_DIR` values discovered from the environment or service files are only auto-deleted when the path itself still carries an explicit `openclaw` marker.
+
+If a custom override points at an opaque directory name such as `~/Documents/agent-state`, the scanner downgrades it to `manual_review` instead of deleting it automatically.
+
 ## Recommended agent behavior
 
 - explain the plan before `apply`

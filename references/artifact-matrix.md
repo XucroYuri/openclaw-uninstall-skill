@@ -22,6 +22,7 @@
 | Companion app traces | `AutoClaw.app`, `autoclaw` app support | Not part of official OpenClaw uninstall docs |
 | Browser bridges from companion apps | `com.autoclaw.native_host_stub.json` | Adjacent ecosystem artifact, not official OpenClaw core |
 | Codex skill folders | `.codex/skills/openclaw-openclaw-obsidian` | Name collision does not imply uninstall target |
+| Custom state override without OpenClaw marker | `~/Documents/agent-state` from `OPENCLAW_STATE_DIR` | Too risky to auto-delete because it may not be a dedicated OpenClaw directory |
 
 ## Explicit exclusions
 
