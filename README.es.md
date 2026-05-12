@@ -197,3 +197,8 @@ python3 -m unittest discover -s tests -v
 ## Licencia
 
 MIT. Ver [LICENSE](LICENSE).
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=XucroYuri/openclaw-uninstall-skill&type=Date)](https://star-history.com/#XucroYuri/openclaw-uninstall-skill&Date)
+
